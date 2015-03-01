@@ -1,0 +1,6 @@
+CentOS-7.0-1406-x86_64-DVD.iso
+	http://centos.cs.nctu.edu.tw/7.0.1406/isos/x86_64/CentOS-7.0-1406-x86_64-DVD.iso
+CentOS-7.0-1406-x86_64-Everything.iso
+	http://centos.cs.nctu.edu.tw/7.0.1406/isos/x86_64/CentOS-7.0-1406-x86_64-Everything.iso
+CentOS-7.0-1406-x86_64-Minimal.iso
+	http://centos.cs.nctu.edu.tw/7.0.1406/isos/x86_64/CentOS-7.0-1406-x86_64-Minimal.iso

@@ -44,15 +44,24 @@ setPrompt() {
 
 getOS() {
   os=unknown
-  os=`lsb_release -a 2>&1 | awk '/Distributor ID:/{print $3}' | tr '[:upper:]' '[:lower:]'`
-  if [ "x$os" == "xcentos" ]; then
-    ver=`lsb_release -a | awk '/Release:/{print $2}'`
-  elif [ "x$os" == "xubuntu" ]; then
-    ver=`awk -F= '/DISTRIB_RELEASE/{print $2}' /etc/lsb-release`
-  elif [ "x$os" == x"suse" ]; then
-    os=`lsb_release -a | grep "SUSE Linux Enterprise Server" &> /dev/null && echo "sles" || echo "opensuse"`
-    ver=`awk '/VERSION/{print $3}' /etc/SuSE-release`
-    ver="${ver}`awk '/PATCHLEVEL/{print "sp"$3}' /etc/SuSE-release`"
+  ver=unknown
+  
+  release_file=/etc/os-release
+  if [ -f $release_file ]; then
+    # CentOS Linux release 7.0.1406 (Core)
+    # Ubuntu
+    os=`awk -F= '/^ID=/{print $2}' $release_file | tr -d \"`
+    ver=`awk -F= '/^VERSION_ID=/{print $2}' $release_file | tr -d \"`
+  else
+    release_file=`find -H /etc -maxdepth 1 -name "*-release" -exec readlink -f {} \; | sort -u | grep -vE '/etc/lsb-release|/etc/os-release'`
+    os=`head -1 $release_file | awk '{print $1}' | tr '[:upper:]' '[:lower:]'`
+  fi
+
+  if [ "x$ver" == "xunknown" ]; then
+    # SUSE Linux Enterprise Server 11 (x86_64)
+    # openSUSE 13.2 (x86_64)
+    ver=`awk '/VERSION/{print $3}' $release_file`
+    ver="${ver}`awk '/PATCHLEVEL/{print "sp"$3}' release_file`"
   fi
 
   if [ "x$1" == "xos" ]; then
@@ -76,7 +85,7 @@ getPM() {
   elif [ "x$os" == "xubuntu" ]; then
     pm=dpkg
     pmu=apt
-  elif [ "x$os" == x"sles" ] || [ "x$os" == x"opensuse" ]; then
+  elif [ "x$os" == x"suse" ] || [ "x$os" == x"opensuse" ]; then
     pm=rpm
     pmu=zypper
   fi
@@ -109,7 +118,7 @@ installPackage() {
   if [ "x$pmu" == "xyum" ]; then
     runCommand "yum install -y $yum_pkg"
   elif [ "x$pmu" == "xapt" ]; then
-    runCommand "sudo apt-get update"
+    # runCommand "sudo apt-get update"
     runCommand "sudo apt-get install -y $apt_pkg"
   elif [ "x$pmu" == "xzypper" ]; then
     runCommand "zypper install -y $zypper_pkg"

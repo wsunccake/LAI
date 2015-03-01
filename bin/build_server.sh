@@ -60,19 +60,28 @@ EOF
 
 
 setPxe() {
-  # install syslinux package
+  # install syslinux/pxelinux package
   installPackage syslinux
+  pxelinux_file= /usr/share/syslinux/pxelinux.0
+  menu_file=/usr/share/syslinux/menu.c32
+
+  # if [ ! -f /usr/share/syslinux/pxelinux.0 ] && [ `getOS os` == "ubuntu"] ; then
+  #   apt-get install -y pxelinux
+  #   pxelinux_file=/usr/lib/PXELINUX/pxelinux.0
+  #   menu_file=/usr/lib/syslinux/modules/bios/menu.c32
+  # else
+  #   pxelinux_file= /usr/share/syslinux/pxelinux.0
+  #   menu_file=/usr/share/syslinux/menu.c32
+  # fi
 
   # configure PXE
   if [ -z $tftp_dir ]; then
-    setPrompt tftp_dir "TFTP dir" /tftp
-    if [ ! -d $tftp_dir ]; then
-      mkdir -p $tftp_dir
-    fi
+    echo "don't set tftp_dir"
+    exit 1
   fi
 
-  cp /usr/share/syslinux/pxelinux.0 $tftp_dir
-  cp /usr/share/syslinux/menu.c32 $tftp_dir
+  cp $pxelinux_file $tftp_dir
+  cp $menu_file $tftp_dir
 
   mkdir -p $tftp_dir/pxelinux.cfg
   cat << EOF > $tftp_dir/pxelinux.cfg/default
@@ -90,18 +99,47 @@ label harddisk
 
 EOF
 
-  echo "set PXE image file [/root/distro.iso]"
-  read pxe_image
-  echo "which image file os distro [centos, fedora, opensuse, ubuntu]:"
-  read target_os
+  echo "create $tftp_dir"
+}
 
-  tmp_mnt=/tmp/`date +%Y%m%d%H%M%S`
-  mkdir -p $tmp_mnt
-  mount -oloop $pxe_image $tmp_mnt
+
+setRepository() {
+  #
+  echo "Set image repository"
+  echo "1. download image from internet"
+  echo "2. image iso in localhost"
+  echo "which one [1]/2 :"
+  read source_type
+
+  if [ "x$source_type" == "x2" ]; then
+    source_type=localhost
+    echo "set PXE image file [/root/distro.iso]"
+    read iso_file
+    if [ ! -f $pxe_image ]; then
+      echo "$pxe_image don't exist"
+      exit 1
+    fi
+    echo "set image distro: [centos, opensuse]: "
+    read target_os
+  else
+    source_type=internet
+    echo "don't implement"
+    echo "support os image"
+    grep -vn "^\s"  ${0%/build_server.sh}/../etc/iso_list.txt
+    read iso_file
+    target_os=${iso_file##-}
+    iso_url=`grep -A1 "^$iso_file" ${0%/build_server.sh}/../etc/iso_list.txt | tail -1 | awk '{print $1}'`
+    iso_file=/tmp/$iso_file
+    curl $iso_url -o $iso_file
+    target_os=`echo $target_os | tr '[:upper:]' '[:lower:]'`
+  fi
+
+  tmp_mnt=`date +%Y%m%d%H%M%S`
+  mount -oloop $iso_file $tmp_mnt
+  mkdir -p $tftp_dir/$target_os
 
   # copy vmlinux, initrd from iso image
-  if [ x"$target_os" == "xcentos" ]; then
-    mkdir -p $tftp_dir/$target_os
+  if [ "x$target_os" == "xcentos" ]; then  
     cp -a $tmp_mnt/isolinux/{vmlinuz,initrd.img} $tftp_dir/$target_os
     cat << EOF >> $tftp_dir/pxelinux.cfg/default
 label $target_os
@@ -111,21 +149,29 @@ label $target_os
 #  append initrd=$target_os/initrd.img method=http://$tftp_ip/iso/$target_os devfs=nomount inst.ks=http://$tftp_ip/lai/kickstart.cfg inst.vnc inst.vncpassword=password
 
 EOF
+  # kickstart
+  cp ${0%/build_server.sh}/../etc/rhel-min-ks.cfg $iso_dir/kickstart.cfg 
+
+  elif [ "x$target_os" == "xopensuse" ]; then
+    echo "don't implement"
   else
     echo "don't support"
     exit 1
   fi
-  umount $tmp_mnt
 
-  echo "create $tftp_dir"
+  echo "create $iso_dir"
 }
-
 
 setHttp() {
   # install apache package
   installPackage httpd apache apache2
 
   # configure apache
+  if [ -z $iso_file ]; then
+    echo "don't set iso_file"
+    exit 1
+  fi
+
   os=`getOS os`
   if [ "x$os" == "xcentos" ]; then
     lai_conf=/etc/httpd/conf.d/lai.conf
@@ -133,7 +179,7 @@ setHttp() {
   elif [ "x$os" == "xubuntu" ]; then
     lai_conf=/etc/httpd/conf.d/lai.conf
     iso_dir=/var/www/html/iso
-  elif [ "x$os" == "xsles" ]; then
+  elif [ "x$os" == "suse" ]; then
     lai_conf=/etc/apache2/conf.d/lai.conf
     iso_dir=/srv/www/htdocs/iso
   else
@@ -195,7 +241,7 @@ setAutoInstall() {
   fi
 
 # openssl passwd -1 $rootpw
- cp ${0%/build_server.sh}/../etc/anaconda-ks.cfg $iso_dir/kickstart.cfg
+ cp ${0%/build_server.sh}/../etc/rhel-min-ks.cfg $iso_dir/kickstart.cfg
  echo "create kickstart.cfg"
 
 }
@@ -205,5 +251,8 @@ setAutoInstall() {
 
 setDnsmasq
 setPxe
+setRepository
 setHttp
-setAutoInstall
+# setNFS
+# setFTP
+# setAutoInstall
